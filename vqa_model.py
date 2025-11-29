@@ -2,51 +2,84 @@ import torch
 import torch.nn as nn
 import timm
 
-
-class CNNLSTMModel(nn.Module):
-    """Mô hình kết hợp CNN (xử lý ảnh) và LSTM (xử lý câu hỏi)."""
-
+class VQAModel(nn.Module):
     def __init__(
         self,
-        vocab_size: int,
-        embedding_dim: int = 300,
-        hidden_dim: int = 512,
-        cnn_backbone: str = "resnet50",
-        num_classes: int = 2,
-        padding_idx: int = 0,
-        pretrained: bool = True,
+        n_classes,
+        img_model_name,
+        vocab_size,  # Added to replace len(vocab) dependency
+        embedding_dim,
+        n_layers=2,
+        hidden_size=256,
+        drop_p=0.2
     ):
-        super().__init__()
-
-        # CNN backbone – lấy đặc trưng ảnh
-        self.cnn = timm.create_model(
-            cnn_backbone,
-            pretrained=pretrained,
-            num_classes=0,  # không có fully connected cuối
+        super(VQAModel, self).__init__()
+        self.image_encoder = timm.create_model(
+            img_model_name,
+            pretrained=True,
+            num_classes=hidden_size
         )
-        cnn_out_dim = self.cnn.num_features
 
-        # Embedding + LSTM cho câu hỏi
-        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=padding_idx)
-        self.lstm = nn.LSTM(
+        for param in self.image_encoder.parameters():
+            param.requires_grad = True
+
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.lstm1 = nn.LSTM(
             input_size=embedding_dim,
-            hidden_size=hidden_dim,
+            hidden_size=hidden_size,
+            num_layers=n_layers,
             batch_first=True,
+            bidirectional=True,
+            dropout=drop_p
         )
 
-        # Kết hợp hai nhánh
-        self.fc = nn.Linear(cnn_out_dim + hidden_dim, num_classes)
+        # hidden_size * 3 because:
+        # img_features (hidden_size) + lstm_out (hidden_size * 2 for bidirectional)
+        self.fc1 = nn.Linear(hidden_size * 3, hidden_size)
+        self.dropout = nn.Dropout(drop_p)
+        self.gelu = nn.GELU()
+        self.fc2 = nn.Linear(hidden_size, n_classes)
 
-    def forward(self, images: torch.Tensor, questions: torch.Tensor):
-        # Hình ảnh qua CNN
-        img_feat = self.cnn(images)  # shape: (B, cnn_out_dim)
+    def forward(self, img, text):
+        img_features = self.image_encoder(img)
 
-        # Câu hỏi qua embedding + LSTM
-        emb = self.embedding(questions)  # (B, T, embed_dim)
-        _, (h_last, _) = self.lstm(emb)  # h_last: (1, B, hidden_dim)
-        txt_feat = h_last.squeeze(0)  # (B, hidden_dim)
+        text_emb = self.embedding(text)
+        lstm_out, _ = self.lstm1(text_emb)
 
-        # Kết hợp và phân lớp
-        features = torch.cat([img_feat, txt_feat], dim=1)
-        logits = self.fc(features)
-        return logits 
+        # Take the output of the last time step
+        lstm_out = lstm_out[:, -1, :]
+
+        combined = torch.cat((img_features, lstm_out), dim=1)
+        x = self.fc1(combined)
+        x = self.gelu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+
+        return x
+
+if __name__ == "__main__":
+    # Example initialization
+    # Assuming some dummy values for vocab and classes since they are not provided
+    classes = ['yes', 'no'] 
+    vocab_size = 1000 
+
+    n_classes = len(classes)
+    img_model_name = 'resnet18'
+    hidden_size = 256
+    n_layers = 2
+    embedding_dim = 128
+    drop_p = 0.2
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    model = VQAModel(
+        n_classes=n_classes,
+        img_model_name=img_model_name,
+        vocab_size=vocab_size,
+        embedding_dim=embedding_dim,
+        n_layers=n_layers,
+        hidden_size=hidden_size,
+        drop_p=drop_p
+    ).to(device)
+
+    print("Model initialized successfully:")
+    print(model)
