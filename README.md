@@ -34,3 +34,7 @@ Finally, we explore recent large-scale vision–language models and adapt them t
 ### CNN + LSTM
 - Val accuracy: 0.5138
 - Test accuracy: 0.5104
+
+### ViT + RoBERTa
+- Val accuracy: 0.6706
+- Test accuracy: 0.6503
