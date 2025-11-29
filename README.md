@@ -28,3 +28,9 @@ We implement two variants of this architecture:
 - A transformer-based approach that combines a Vision Transformer (**ViT**) with **RoBERTa**.
 
 Finally, we explore recent large-scale vision–language models and adapt them to the VQA task in this project.
+
+## Results
+
+### CNN + LSTM
+- Val accuracy: 0.5138
+- Test accuracy: 0.5104
