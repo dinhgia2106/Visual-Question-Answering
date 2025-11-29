@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from torchtext.vocab import build_vocab_from_iterator
+from collections import Counter
 from torchvision import transforms
 from PIL import Image
 import spacy
@@ -79,6 +79,7 @@ def _load_split(list_path: str):
 _eng = spacy.load("en_core_web_sm")
 
 
+
 def _token_generator(data_iter):
     for sample in data_iter:
         question = sample["question"]
@@ -87,19 +88,20 @@ def _token_generator(data_iter):
 
 def build_vocab(train_data, min_freq: int = 2):
     specials = ["<pad>", "<sos>", "<eos>", "<unk>"]
-    vocab = build_vocab_from_iterator(
-        _token_generator(train_data),
-        min_freq=min_freq,
-        specials=specials,
-        special_first=True,
-    )
-    vocab.set_default_index(vocab["<unk>"])
+    counter = Counter()
+    for tokens in _token_generator(train_data):
+        counter.update(tokens)
+    
+    vocab = {token: i for i, token in enumerate(specials)}
+    idx = len(specials)
+    
+    for word, count in counter.items():
+        if count >= min_freq:
+            if word not in vocab:
+                vocab[word] = idx
+                idx += 1
     return vocab
 
-
-# -----------------------------
-# 6. DICTIONARY MAPPING CHO LABELS
-# -----------------------------
 
 def build_label_mapping(train_data):
     classes = {sample["answer"] for sample in train_data}
@@ -108,23 +110,17 @@ def build_label_mapping(train_data):
     return label2idx, idx2label
 
 
-# -----------------------------
-# 7. HÀM TOKENIZE CÂU HỎI
-# -----------------------------
-
 def tokenize(question: str, vocab, max_seq_len: int):
     tokens = [tok.text for tok in _eng.tokenizer(question)]
-    seq = [vocab[token] for token in tokens]
+    unk_idx = vocab.get("<unk>")
+    seq = [vocab.get(token, unk_idx) for token in tokens]
     if len(seq) < max_seq_len:
-        seq += [vocab["<pad>"]] * (max_seq_len - len(seq))
+        pad_idx = vocab.get("<pad>")
+        seq += [pad_idx] * (max_seq_len - len(seq))
     else:
         seq = seq[:max_seq_len]
     return seq
 
-
-# -----------------------------
-# 8. CLASS DATASET CHO VQA
-# -----------------------------
 
 class VQADataset(Dataset):
     def __init__(
