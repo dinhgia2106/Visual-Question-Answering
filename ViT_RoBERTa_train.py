@@ -52,9 +52,13 @@ def evaluate(model, dataloader, criterion, device):
     losses = []
     with torch.no_grad():
         for idx, inputs in enumerate(dataloader):
-            images = inputs['image'].to(device)
-            questions = inputs['question'].to(device)
-            labels = inputs['label'].to(device)
+            images = inputs['image']
+            questions = inputs['question']
+            labels = inputs['label']
+
+            images = {k: v.to(device) for k, v in images.items()}
+            questions = {k: v.to(device) for k, v in questions.items()}
+            labels = labels.to(device)
             
             outputs = model(images, questions)
             loss = criterion(outputs, labels)
@@ -87,9 +91,13 @@ def fit(
         
         model.train()
         for idx, inputs in enumerate(train_loader):
-            images = inputs['image'].to(device)
-            questions = inputs['question'].to(device)
-            labels = inputs['label'].to(device)
+            images = inputs['image']
+            questions = inputs['question']
+            labels = inputs['label']
+
+            images = {k: v.to(device) for k, v in images.items()}
+            questions = {k: v.to(device) for k, v in questions.items()}
+            labels = labels.to(device)
             
             optimizer.zero_grad()
             outputs = model(images, questions)
